@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aib-restrict-egress
+  namespace: ztr-aa
+spec:
+  podSelector:
+    matchLabels:
+      app: aib-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: opa
+      ports:
+        - protocol: TCP
+          port: 8181

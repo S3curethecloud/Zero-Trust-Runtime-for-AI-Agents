@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ztr-aa
+resources:
+  - namespace.yaml
+  - deployment-aib.yaml
+  - service-aib.yaml
+  - configmap-opa.yaml
+  - configmap-opa-config.yaml
+  - deployment-opa.yaml
+  - service-opa.yaml
+  - networkpolicy.yaml

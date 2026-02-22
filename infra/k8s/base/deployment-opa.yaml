@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  namespace: ztr-aa
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: opa
+  template:
+    metadata:
+      labels:
+        app: opa
+    spec:
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:latest
+          args:
+            - "run"
+            - "--server"
+            - "--config-file=/config/opa.yaml"
+            - "/policy"
+          ports:
+            - containerPort: 8181
+          volumeMounts:
+            - name: opa-policy
+              mountPath: /policy
+            - name: opa-config
+              mountPath: /config
+      volumes:
+        - name: opa-policy
+          configMap:
+            name: opa-policy
+        - name: opa-config
+          configMap:
+            name: opa-config

@@ -1,0 +1,28 @@
+services:
+  opa:
+    image: openpolicyagent/opa:latest
+    command:
+      - "run"
+      - "--server"
+      - "--config-file=/config/opa.yaml"
+      - "/policy"
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./services/opa/policy:/policy:ro
+      - ./services/opa/config:/config:ro
+
+  aib-api:
+    build:
+      context: ./services/aib-api
+    environment:
+      - AIB_OPA_URL=http://opa:8181
+      - AIB_JWT_ISSUER=aib.local
+      - AIB_JWT_AUDIENCE=ztr-aa
+      - AIB_JWT_TTL_SECONDS=300
+      - AIB_SIGNING_KEY_DEV_ONLY=dev-secret-change-me
+      - AIB_REQUIRE_AGENT_AUTH=false
+    ports:
+      - "8080:8080"
+    depends_on:
+      - opa
