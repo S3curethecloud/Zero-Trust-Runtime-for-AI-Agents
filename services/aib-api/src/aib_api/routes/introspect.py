@@ -1,27 +1,47 @@
-from __future__ import annotations
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+import jwt
 
-from fastapi import APIRouter
+from aib_api.tokens import load_public_key
+from aib_api.session_store import is_session_active, revoke_session
 
-from aib_api.models import TokenIntrospectRequest, TokenIntrospectResponse
-from aib_api.tokens import introspect
-
-router = APIRouter(prefix="/v1")
+router = APIRouter()
 
 
-@router.post("/tokens:introspect", response_model=TokenIntrospectResponse)
-def token_introspect(req: TokenIntrospectRequest):
-    res = introspect(req.token)
-    if not res.get("active"):
-        return TokenIntrospectResponse(active=False, revoked=bool(res.get("revoked", False)))
+class IntrospectRequest(BaseModel):
+    token: str
 
-    claims = res["claims"]
-    return TokenIntrospectResponse(
-        active=True and not bool(res.get("revoked", False)),
-        revoked=bool(res.get("revoked", False)),
-        session_id=str(claims.get("sid")) if claims.get("sid") else None,
-        scope=list(claims.get("scope") or []),
-        sub=str(claims.get("sub")) if claims.get("sub") else None,
-        aud=str(claims.get("aud")) if claims.get("aud") else None,
-        exp=int(claims.get("exp")) if claims.get("exp") else None,
-        policy_rev=str(claims.get("policy_rev")) if claims.get("policy_rev") else None,
-    )
+
+@router.post("/introspect")
+def introspect(body: IntrospectRequest):
+    public_key = load_public_key()
+
+    try:
+        payload = jwt.decode(
+            body.token,
+            public_key,
+            algorithms=["RS256"],
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    sid = payload.get("sid")
+    if not sid:
+        raise HTTPException(status_code=401, detail="Missing sid")
+
+    if not is_session_active(sid):
+        raise HTTPException(status_code=401, detail="Session revoked")
+
+    return {
+        "active": True,
+        "sub": payload.get("sub"),
+        "sid": sid,
+        "exp": payload.get("exp"),
+        "iat": payload.get("iat"),
+    }
+
+
+@router.post("/revoke/{sid}")
+def revoke(sid: str):
+    revoke_session(sid)
+    return {"revoked": sid}
