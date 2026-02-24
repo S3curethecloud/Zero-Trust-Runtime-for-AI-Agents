@@ -1,0 +1,3 @@
+# AIB private keys (never commit)
+services/aib-api/keys/active/private.pem
+services/aib-api/keys/archive/
