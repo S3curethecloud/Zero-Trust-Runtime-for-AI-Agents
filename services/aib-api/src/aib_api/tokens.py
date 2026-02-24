@@ -1,77 +1,76 @@
-from __future__ import annotations
+from typing import Dict, Any
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
-import time
-import uuid
-from typing import Any, Dict, List, Optional, Tuple
-
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
 import jwt
+from jwt import InvalidTokenError
 
-from aib_api.settings import settings
+# NOTE: KEYS_DIR and KID must be defined in your project scope.
+# If your project already defines these above, keep them there and remove duplicates.
+KEYS_DIR = Path(__file__).resolve().parent / "keys"
+KID = "aib-key-1"
 
-
-class SessionStore:
-    """MVP in-memory store. Enterprise: replace with durable store (e.g., Redis)."""
-
-    def __init__(self) -> None:
-        self._revoked: set[str] = set()
-
-    def revoke(self, session_id: str) -> None:
-        self._revoked.add(session_id)
-
-    def is_revoked(self, session_id: str) -> bool:
-        return session_id in self._revoked
+PRIVATE_KEY_PATH = KEYS_DIR / "private.pem"
+PUBLIC_KEY_PATH = KEYS_DIR / "public.pem"
 
 
-session_store = SessionStore()
+def load_private_key() -> str:
+    with open(PRIVATE_KEY_PATH, "r") as f:
+        return f.read()
 
 
-def issue_token(
-    sub: str,
-    scopes: List[str],
-    policy_rev: str,
-    ttl_seconds: int,
-    audience: str,
-    issuer: str,
-) -> Tuple[str, str, int]:
-    now = int(time.time())
-    exp = now + max(1, min(ttl_seconds, settings.jwt_ttl_seconds))
-    sid = f"sid_{uuid.uuid4().hex}"
+def load_public_key():
+    with open(PUBLIC_KEY_PATH, "rb") as f:
+        return serialization.load_pem_public_key(
+            f.read(),
+            backend=default_backend()
+        )
 
-    claims: Dict[str, Any] = {
-        "iss": issuer,
-        "aud": audience,
-        "sub": sub,
-        "scope": scopes,
-        "sid": sid,
-        "policy_rev": policy_rev,
+
+# ---- Revocation Store ----
+REVOKED_TOKENS = set()
+
+
+def revoke_token(token: str):
+    REVOKED_TOKENS.add(token)
+
+
+def is_revoked(token: str) -> bool:
+    return token in REVOKED_TOKENS
+
+
+def issue_token(subject: str, claims: Dict[str, Any], expires_minutes: int = 15) -> str:
+    private_key = load_private_key()
+
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": subject,
         "iat": now,
-        "exp": exp,
+        "exp": now + timedelta(minutes=expires_minutes),
+        **claims,
     }
 
-    token = jwt.encode(claims, settings.signing_key_dev_only, algorithm="HS256")
-    return token, sid, exp
-
-
-def decode_token(token: str) -> Dict[str, Any]:
-    return jwt.decode(
-        token,
-        settings.signing_key_dev_only,
-        algorithms=["HS256"],
-        audience=settings.jwt_audience,
-        issuer=settings.jwt_issuer,
+    token = jwt.encode(
+        payload,
+        private_key,
+        algorithm="RS256",
+        headers={"kid": KID},
     )
 
+    return token
 
-def introspect(token: str) -> Dict[str, Any]:
+
+def verify_token(token: str):
+    public_key = load_public_key()
+
     try:
-        claims = decode_token(token)
-    except Exception:
-        return {"active": False, "revoked": False}
-
-    sid = claims.get("sid")
-    revoked = bool(sid and session_store.is_revoked(str(sid)))
-    return {
-        "active": True and not revoked,
-        "revoked": revoked,
-        "claims": claims,
-    }
+        payload = jwt.decode(
+            token,
+            public_key,
+            algorithms=["RS256"],
+        )
+        return {"active": True, "payload": payload}
+    except InvalidTokenError:
+        return {"active": False, "payload": None}
