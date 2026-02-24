@@ -8,7 +8,8 @@ default decision = {
 }
 
 # ---- Helpers ----
-has_role(role) {
+
+has_role(role) if {
   role == input.principal.roles[_]
 }
 
@@ -22,7 +23,7 @@ decision = {
   "scopes": ["refund:create"],
   "ttl_seconds": 300,
   "obligations": {"reason_codes": ["ROLE_MATCHED", "AMOUNT_OK", "RISK_OK"]}
-} {
+} if {
   input.intent.action == "refund:create"
   has_role("refund_agent")
   amount_usd <= 500
@@ -35,7 +36,7 @@ decision = {
   "scopes": ["refund:read"],
   "ttl_seconds": 300,
   "obligations": {"reason_codes": ["ROLE_MATCHED"]}
-} {
+} if {
   input.intent.action == "refund:read"
   has_role("support_agent")
 }
