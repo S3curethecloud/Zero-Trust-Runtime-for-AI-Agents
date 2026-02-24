@@ -1,0 +1,11 @@
+# AIB private keys (never commit)
+services/aib-api/keys/active/private.pem
+services/aib-api/keys/archive/
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.*
